@@ -361,3 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+**/.utmp/
+**/Assets/BayatGames/
+/.utmp
+/Library
+/Temp
