@@ -22,17 +22,22 @@ public class PlayerMovement : MonoBehaviour
     public CharacterController2D controller;
     public Joystick joystick;
     public Animator animator;
+    public Player player; // Reference to your player
     public float runSpeed = 20f;
-    public bool jump = false;
+    
     public bool crouch = false;
 
     public PLAYER_ACTION playerAction;
     public BUTTON_ACTION jumpButtonAction;
     public BUTTON_ACTION crouchButtonAction;
 
-    // float horizontalMoveAltInput = 0f;
-    // float horizontalMoveJoystick = 0f;
+    public bool jump = false; // To trigger the initial jump in FixedUpdate
+    public bool isDoubleJumping = false; // Flag to indicate if the player is in the double jump hold state
+    public int jumpsPerformed = 0; // Track the number of jumps performed
+    private int maxJumps = 2; // Max number of jumps, one additional jump from initial, so 2 jumps 0 and 1
+
     float horizontalMove = 0f;
+
 
     // Called when the script is enabled.
     private void OnEnable()
@@ -76,9 +81,16 @@ public class PlayerMovement : MonoBehaviour
         // Handle UI button actions if they are active
         if (playerAction == PLAYER_ACTION.Jump && jumpButtonAction == BUTTON_ACTION.Down)
         {
-            Jump();
+            StartJump();
             Debug.Log("Jump is true (UI)");
             jumpButtonAction = BUTTON_ACTION.None; // Reset after handling
+            playerAction = PLAYER_ACTION.None;
+        }
+        else if (playerAction == PLAYER_ACTION.Jump && jumpButtonAction == BUTTON_ACTION.Up)
+        {
+            EndJump();
+            Debug.Log("Crouch GetButtonUp (UI)");
+            jumpButtonAction = BUTTON_ACTION.None;
             playerAction = PLAYER_ACTION.None;
         }
 
@@ -96,19 +108,18 @@ public class PlayerMovement : MonoBehaviour
             crouchButtonAction = BUTTON_ACTION.None;
             playerAction = PLAYER_ACTION.None;
         }
+
+        // Handle double jump animation
+        animator.SetBool("IsDoubleJumping", isDoubleJumping);
     }
 
     // Called at a fixed rate, useful for physics calculations.
     private void FixedUpdate()
     {
         // Move our character
-        controller.Move(horizontalMove * Time.fixedDeltaTime, crouch, jump);
-        if (jump)
-        {
-            //jump = false;
-            //jumpButtonAction = BUTTON_ACTION.None;
-            Debug.Log("Jump is false");
-        }
+        controller.Move(horizontalMove * Time.fixedDeltaTime, crouch, jump, isDoubleJumping);
+        Debug.Log("Player should be jumping: " + jump);
+        jump = false; // Reset the jump input flag
     }
 
     // Called when an input action changes (performed, canceled, etc.).
@@ -117,13 +128,13 @@ public class PlayerMovement : MonoBehaviour
         if (change == InputActionChange.ActionPerformed)
         {
             InputAction action = obj as InputAction;
-            if (action == InputSystem.actions["Player/Jump"])
-            {
-                Jump();
-            }
-            else if (action == InputSystem.actions["Player/Crouch"])
+            if (action == InputSystem.actions["Player/Crouch"])
             {
                 StartCrouch();
+            }
+            else if (action == InputSystem.actions["Player/Jump"])
+            {
+                StartJump();
             }
         }
         else if (change == InputActionChange.ActionCanceled)
@@ -133,14 +144,55 @@ public class PlayerMovement : MonoBehaviour
             {
                 EndCrouch();
             }
+            else if (action == InputSystem.actions["Player/Jump"])
+            {
+                EndJump();
+            }
         }
     }
 
-    private void Jump()
+    private void StartJump()
     {
-        jump = true;
-        animator.SetBool("IsJumping", true);
-        Debug.Log("Jump is true (Input System)");
+        
+        if (jumpsPerformed > 0 && jumpsPerformed <= maxJumps && (player.HasAbility(IPlayer.AbilityType.DoubleJump)))
+        {
+            jump = true; // Set the flag to trigger jump in FixedUpdate
+            isDoubleJumping = true; // Set the flag to indicate double jump hold
+            jumpsPerformed++;
+            animator.SetBool("IsJumping", true);
+            animator.SetBool("IsDoubleJumping", true);
+            Debug.Log($"Jump Attempted. Jumps Performed: {jumpsPerformed}");
+        }
+        else if (jumpsPerformed == 0 && jumpsPerformed < maxJumps)
+        {
+            jump = true; // Set the flag to trigger jump in FixedUpdate
+            jumpsPerformed++;
+            isDoubleJumping = false; // Set the flag to trigger jump in FixedUpdate
+            Debug.Log("Regular Jump");
+            animator.SetBool("IsJumping", true);
+            animator.SetBool("IsDoubleJumping", false);
+        }
+        
+    }
+
+    private void EndJump()
+    {
+
+        // If double jump is happening
+        if (isDoubleJumping)
+        {
+            if (jumpsPerformed <= maxJumps)
+            {
+                animator.SetBool("IsJumping", true);
+                animator.SetBool("IsDoubleJumping", false);
+            }
+            else if (jumpsPerformed == maxJumps)
+            {
+                jump = false; // Set the flag to trigger jump in FixedUpdate
+                isDoubleJumping = false; // Set the flag to indicate double jump hold
+            }
+                Debug.Log($"Jump Attempted. Jumps Performed: {jumpsPerformed}");
+        }
     }
 
     private void StartCrouch()
@@ -157,10 +209,14 @@ public class PlayerMovement : MonoBehaviour
 
     public void OnLanding()
     {
+
         jump = false;
+        isDoubleJumping = false; // Ensure double jump hold is reset on landing
         jumpButtonAction = BUTTON_ACTION.None;
-        Debug.Log("On Landing Ran");
+        jumpsPerformed = 0; // Reset jump counter on landing
         animator.SetBool("IsJumping", false);
+        animator.SetBool("IsDoubleJumping", false);
+        Debug.Log("On Landing Ran");
     }
 
     public void OnCrouch(bool isCrouching)
